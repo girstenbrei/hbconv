@@ -8,7 +8,7 @@ use std::{
 
 use clap::{Parser, ValueEnum};
 use homebank::Record;
-use inputs::postbank::PostbankIter;
+use inputs::{postbank::PostbankIter, sparda::TeoIter};
 use miette::{Context, IntoDiagnostic, Result};
 
 /// A conversion tool to produce homebank compatible csv files
@@ -24,6 +24,7 @@ struct Args {
 #[derive(Debug, Clone, ValueEnum)]
 enum Format {
     Postbank,
+    Sparda,
 }
 
 impl Format {
@@ -34,6 +35,10 @@ impl Format {
         match self {
             Format::Postbank => {
                 let input = PostbankIter::new(input);
+                Ok(RecordIterator::new(Box::new(input.into_iter())))
+            }
+            Format::Sparda => {
+                let input = TeoIter::new(input);
                 Ok(RecordIterator::new(Box::new(input.into_iter())))
             }
         }

@@ -105,7 +105,7 @@ impl TryFrom<PostbankIR> for Postbank {
         let currency_opts = CurrencyOpts::new()
             .set_decimal(",")
             .set_separator("")
-            .set_negative_pattern("-#");
+            .set_symbol("");
 
         Ok(Self {
             buchungstag: NaiveDate::parse_from_str(&value.buchungstag, "%d.%m.%Y")
