@@ -1,11 +1,13 @@
 use chrono::NaiveDate;
 use csv::{DeserializeRecordsIntoIter, ReaderBuilder};
 use currency_rs::{Currency, CurrencyOpts};
-use miette::{Context, IntoDiagnostic, Report, Result, miette};
+use miette::{miette, Context, IntoDiagnostic, Report, Result};
 use serde::Deserialize;
-use std::io::{BufRead, BufReader, Read};
+use std::{io::Read, iter::Skip};
 
 use crate::homebank::{Payment, Record};
+
+use super::util::{SkipLast, SkipLastIterator};
 
 #[derive(Debug)]
 pub struct Postbank {
@@ -52,30 +54,26 @@ struct PostbankIR {
 }
 
 pub struct PostbankIter<R: Read> {
-    deser: DeserializeRecordsIntoIter<BufReader<R>, PostbankIR>,
+    deser: SkipLastIterator<Skip<DeserializeRecordsIntoIter<R, PostbankIR>>>,
 }
 
 impl<R: Read> PostbankIter<R> {
     pub fn new(rdr: R) -> Self {
-        let mut buf_read = BufReader::new(rdr);
-        let mut buf = Vec::new();
-        // We skip the first 7 lines outright, because apparently Postbank
-        // has an insane idea about what constitutes a valid CSV file.
-        for _i in 0..=7 {
-            buf_read.read_until(b'\n', &mut buf).expect("Bum");
-        }
-        // println!("Skipped|{}|", String::from_utf8_lossy(&buf));
-
         let rdr = ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(false)
             .quoting(false)
             .flexible(true)
-            .from_reader(buf_read);
+            .from_reader(rdr);
 
-        Self {
-            deser: rdr.into_deserialize(),
-        }
+        let deser: DeserializeRecordsIntoIter<R, PostbankIR> = rdr.into_deserialize();
+        // We skip the first 7 lines outright, because apparently Postbank
+        // has an insane idea about what constitutes a valid CSV file.
+        // Then we skip the last element, because apparently  Postbank
+        // has an insane idea about what constitutes a valid CSV file.
+        let skip = deser.skip(7).skip_last();
+
+        Self { deser: skip }
     }
 }
 
@@ -122,15 +120,15 @@ impl TryFrom<PostbankIR> for Postbank {
             _gläubiger_id: value._gläubiger_id,
             _fremde_gebühren: value._fremde_gebühren,
             betrag: Currency::new_string(&value.betrag, Some(currency_opts.clone()))
-            .map_err(|e|miette!("{:?}", e))
-            .wrap_err("Failed converting currency")?,
+                .map_err(|e| miette!("{:?}", e))
+                .wrap_err("Failed converting currency")?,
             _abweichender_empfänger: value._abweichender_empfänger,
             _count_aufträge: value._count_aufträge,
             _count_schecks: value._count_schecks,
             _soll: value._soll,
             _haben: value._haben,
             _währung: Currency::new_string(&value._währung, Some(currency_opts.clone()))
-                .map_err(|e|miette!("{:?}", e))
+                .map_err(|e| miette!("{:?}", e))
                 .wrap_err("Failed converting currency")?,
         })
     }
