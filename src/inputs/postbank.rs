@@ -1,7 +1,10 @@
 use chrono::NaiveDate;
 use csv::{DeserializeRecordsIntoIter, ReaderBuilder};
-use currency_rs::{Currency, CurrencyOpts};
-use miette::{miette, Context, IntoDiagnostic, Report, Result};
+use miette::{Context, IntoDiagnostic, Report, Result};
+use rusty_money::{
+    iso::{Currency, EUR},
+    Money,
+};
 use serde::Deserialize;
 use std::{io::Read, iter::Skip};
 
@@ -25,13 +28,13 @@ pub struct Postbank {
     _mandatsreferenz: String,
     _gläubiger_id: String,
     _fremde_gebühren: String,
-    betrag: Currency,
+    betrag: Money<'static, Currency>,
     _abweichender_empfänger: String,
     _count_aufträge: String,
     _count_schecks: String,
     _soll: String,
     _haben: String,
-    _währung: Currency,
+    _währung: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,11 +105,6 @@ impl<R: Read> Iterator for PostbankIter<R> {
 impl TryFrom<PostbankIR> for Postbank {
     type Error = Report;
     fn try_from(value: PostbankIR) -> Result<Self> {
-        let currency_opts = CurrencyOpts::new()
-            .set_decimal(",")
-            .set_separator("")
-            .set_symbol("");
-
         Ok(Self {
             buchungstag: NaiveDate::parse_from_str(&value.buchungstag, "%d.%m.%Y")
                 .into_diagnostic()
@@ -123,17 +121,15 @@ impl TryFrom<PostbankIR> for Postbank {
             _mandatsreferenz: value._mandatsreferenz,
             _gläubiger_id: value._gläubiger_id,
             _fremde_gebühren: value._fremde_gebühren,
-            betrag: Currency::new_string(&value.betrag, Some(currency_opts.clone()))
-                .map_err(|e| miette!("{:?}", e))
-                .wrap_err("Failed converting currency")?,
+            betrag: Money::from_str(value.betrag.trim_matches('"'), EUR)
+                .into_diagnostic()
+                .wrap_err("Failed converting field 'betrag' to currency")?,
             _abweichender_empfänger: value._abweichender_empfänger,
             _count_aufträge: value._count_aufträge,
             _count_schecks: value._count_schecks,
             _soll: value._soll,
             _haben: value._haben,
-            _währung: Currency::new_string(&value._währung, Some(currency_opts.clone()))
-                .map_err(|e| miette!("{:?}", e))
-                .wrap_err("Failed converting currency")?,
+            _währung: value._währung,
         })
     }
 }
