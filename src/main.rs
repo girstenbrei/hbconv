@@ -1,9 +1,12 @@
 mod homebank;
 mod inputs;
 
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use homebank::Record;
 use inputs::postbank::PostbankIter;
 use miette::{Context, IntoDiagnostic, Result};
@@ -14,19 +17,34 @@ struct Args {
     #[arg(short, long, env)]
     output: PathBuf,
     input: PathBuf,
-    // #[arg(short, long, env, value_enum)]
-    // format: Loader,
+    #[arg(short, long, env, value_enum)]
+    format: Format,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum Format {
+    Postbank,
+}
+
+impl Format {
+    fn open_input(&self, input: &Path) -> Result<RecordIterator> {
+        let input = File::open(input)
+            .into_diagnostic()
+            .wrap_err("Failed opening input file")?;
+        match self {
+            Format::Postbank => {
+                let input = PostbankIter::new(input);
+                Ok(RecordIterator::new(Box::new(input.into_iter())))
+            }
+        }
+    }
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let input = File::open(args.input)
-        .into_diagnostic()
-        .wrap_err("Failed opening input file")?;
-    let input = PostbankIter::new(input);
-    let input = RecordIterator::new(Box::new(input.into_iter()));
-
+    // Open I/O
+    let input = args.format.open_input(&args.input)?;
     let output = File::create(args.output)
         .into_diagnostic()
         .wrap_err("Failed opening output file")?;
