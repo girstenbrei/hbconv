@@ -5,7 +5,10 @@ use miette::{miette, Context, IntoDiagnostic, Report, Result};
 use serde::Deserialize;
 use std::{io::Read, iter::Skip};
 
-use crate::homebank::{Payment, Record};
+use crate::{
+    homebank::{Payment, Record},
+    RecordIteratorRes,
+};
 
 use super::util::{SkipLast, SkipLastIterator};
 
@@ -78,7 +81,7 @@ impl<R: Read> PostbankIter<R> {
 }
 
 impl<R: Read> Iterator for PostbankIter<R> {
-    type Item = Result<Postbank>;
+    type Item = RecordIteratorRes;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self
@@ -89,8 +92,9 @@ impl<R: Read> Iterator for PostbankIter<R> {
             .wrap_err("Failed deserializing record");
 
         match next {
-            Ok(v) => Some(v),
+            Ok(Err(e)) => Some(Err(e)),
             Err(e) => Some(Err(e)),
+            Ok(Ok(v)) => Some(Ok(v.into())),
         }
     }
 }
@@ -160,7 +164,7 @@ mod test {
         let input = b"\n\n\n\n\n\n\n\n7.3.2024;7.3.2024;SEPA Lastschrift;Woopsie;Doopsie;DE123;;ABCD;EFG;DE123;;-25,88;;;;-25,88;;EUR\n";
 
         let postbank_iter = PostbankIter::new(&input[..]);
-        let element: Vec<Result<Postbank>> = postbank_iter.collect();
+        let element: Vec<Result<Record>> = postbank_iter.collect();
 
         assert_eq!(element.len(), 1);
         assert!(element[0].is_ok());

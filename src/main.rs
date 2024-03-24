@@ -25,6 +25,7 @@ fn main() -> Result<()> {
         .into_diagnostic()
         .wrap_err("Failed opening input file")?;
     let input = PostbankIter::new(input);
+    let input = RecordIterator::new(Box::new(input.into_iter()));
 
     let output = File::create(args.output)
         .into_diagnostic()
@@ -32,15 +33,13 @@ fn main() -> Result<()> {
     let mut output = Record::writer(output);
 
     for record in input {
-        let record = match record {
+        let hb_record = match record {
             Ok(r) => r,
             Err(err) => {
                 eprintln!("{:?}", err);
                 continue;
             }
         };
-
-        let hb_record: Record = record.into();
         hb_record.write(&mut output)?;
     }
 
@@ -50,4 +49,28 @@ fn main() -> Result<()> {
         .wrap_err("Failed flushing output")?;
 
     Ok(())
+}
+
+type RecordIteratorRes = Result<Record>;
+
+struct RecordIterator {
+    inner: Box<dyn Iterator<Item = RecordIteratorRes>>,
+}
+
+impl RecordIterator {
+    fn new(inner: Box<dyn Iterator<Item = RecordIteratorRes>>) -> Self {
+        Self { inner }
+    }
+}
+
+impl Iterator for RecordIterator {
+    type Item = RecordIteratorRes;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+trait IntoRecord {
+    fn into_record(self) -> Record;
 }
