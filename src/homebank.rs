@@ -6,8 +6,8 @@ use std::io;
 
 use chrono::NaiveDate;
 use csv::{Writer, WriterBuilder};
-use currency_rs::Currency;
 use miette::{Context, IntoDiagnostic, Result};
+use rusty_money::{iso::Currency, Money};
 use serde::{Deserialize, Serialize};
 
 #[allow(clippy::enum_variant_names)]
@@ -36,7 +36,7 @@ pub struct Record {
     pub info: String,
     pub payee: String,
     pub memo: String,
-    pub amount: Currency,
+    pub amount: Money<'static, Currency>,
     pub category: String,
     // tags separated by space
     pub tags: Vec<String>,
@@ -81,7 +81,7 @@ impl From<Record> for RecordIR {
             info: value.info,
             payee: value.payee,
             memo: value.memo,
-            amount: value.amount.format(),
+            amount: value.amount.to_string(),
             category: value.category,
             tags: value.tags.join(" "),
         }
@@ -90,10 +90,9 @@ impl From<Record> for RecordIR {
 
 #[cfg(test)]
 mod test {
-    use currency_rs::CurrencyOpts;
-
     use super::*;
     use pretty_assertions::assert_eq;
+    use rusty_money::iso::EUR;
 
     #[test]
     fn test_basic_deser() {
@@ -101,9 +100,6 @@ mod test {
 
         let date =
             NaiveDate::parse_from_str("2015-02-04", "%Y-%m-%d").expect("Failed parsing date");
-        let currency_opts = CurrencyOpts::new()
-            .set_decimal(",")
-            .set_negative_pattern("-#");
 
         let data = vec![
             Record {
@@ -112,8 +108,7 @@ mod test {
                 info: "".to_string(),
                 payee: "".to_string(),
                 memo: "Some cash".to_string(),
-                amount: Currency::new_string("-40,00", Some(currency_opts.clone()))
-                    .expect("Failed parsing currency"),
+                amount: Money::from_str("40,00", EUR).expect("Failed parsing money"),
                 category: "Bill:Withdrawal of cash".to_string(),
                 tags: vec!["tag1".to_string(), "tag2".to_string()],
             },
@@ -123,8 +118,7 @@ mod test {
                 info: "".to_string(),
                 payee: "".to_string(),
                 memo: "Internet DSL".to_string(),
-                amount: Currency::new_string("-45,00", Some(currency_opts.clone()))
-                    .expect("Failed parsing currency"),
+                amount: Money::from_str("-45,00", EUR).expect("Failed parsing money"),
                 category: "Inline service/Internet".to_string(),
                 tags: vec!["tag2".to_string(), "my-tag3".to_string()],
             },

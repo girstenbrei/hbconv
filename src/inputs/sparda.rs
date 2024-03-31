@@ -2,10 +2,10 @@ use std::{io::Read, iter::Skip};
 
 use chrono::NaiveDate;
 use csv::{DeserializeRecordsIntoIter, ReaderBuilder};
-use currency_rs::{Currency, CurrencyOpts};
+use rusty_money::{iso::{Currency, EUR}, Money};
 use encoding_rs::WINDOWS_1252;
 use encoding_rs_io::{DecodeReaderBytes, DecodeReaderBytesBuilder};
-use miette::{miette, Context, IntoDiagnostic, Report};
+use miette::{Context, IntoDiagnostic, Report};
 use serde::Deserialize;
 
 use crate::{
@@ -19,7 +19,7 @@ struct Sparda {
     gegeniban: String,
     name_gegenkonto: String,
     verwendungszweck: String,
-    umsatz: Currency,
+    umsatz: Money<'static, Currency>,
     _währung: String,
 }
 
@@ -38,11 +38,6 @@ impl TryFrom<SpardaIR> for Sparda {
     type Error = Report;
 
     fn try_from(value: SpardaIR) -> Result<Self, Self::Error> {
-        let currency_opts = CurrencyOpts::new()
-            .set_decimal(",")
-            .set_separator("")
-            .set_negative_pattern("-#")
-            .set_symbol("");
 
         Ok(Self {
             buchungstag: NaiveDate::parse_from_str(&value.buchungstag, "%Y-%m-%d")
@@ -54,8 +49,9 @@ impl TryFrom<SpardaIR> for Sparda {
             gegeniban: value.gegeniban,
             name_gegenkonto: value.name_gegenkonto,
             verwendungszweck: value.verwendungszweck,
-            umsatz: Currency::new_string(&value.umsatz, Some(currency_opts.clone()))
-                .map_err(|e| miette!("{:?}", e))
+            umsatz: Money::from_str(
+                value.umsatz.trim_matches('"'), EUR)
+                .into_diagnostic()
                 .wrap_err("Failed converting currency")?,
             _währung: value.währung,
         })
